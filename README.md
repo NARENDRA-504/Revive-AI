@@ -36,4 +36,3 @@ Every tenant-owned query is scoped by an authenticated workspace membership. Sec
 ## Next phase
 
 Add customer, lead, quote, and conversation records, then deterministic revenue-opportunity detection. See [ARCHITECTURE.md](ARCHITECTURE.md) for boundaries and tenancy rules.
-
