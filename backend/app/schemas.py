@@ -141,3 +141,17 @@ class QuoteResponse(QuoteInput):
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
+class OpportunityResponse(BaseModel):
+    id: str
+    source_type: Literal["lead", "quote"]
+    source_id: UUID
+    title: str
+    customer: str
+    amount: Decimal
+    currency: str
+    days_waiting: int
+    priority: Literal["HIGH", "MEDIUM", "LOW"]
+    reason: str
+    recommended_action: str
+

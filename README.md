@@ -4,7 +4,7 @@ ReviveAI helps small service businesses find stalled leads and quotations, under
 
 ## Current phase: core business data
 
-The foundation includes a React client, FastAPI API, PostgreSQL persistence, password-based authentication, workspace membership, Docker development environment, and Alembic migrations. The core data phase adds workspace-scoped lead and quote management with create, list, update, and delete operations. The dashboard derives its stalled lead and quote totals from saved workspace records.
+The foundation includes a React client, FastAPI API, PostgreSQL persistence, password-based authentication, workspace membership, Docker development environment, and Alembic migrations. Core data includes workspace-scoped lead and quote management with create, list, update, and delete operations. The dashboard derives its stalled lead and quote totals from saved workspace records, and a deterministic opportunity feed explains why each item is waiting and what to review next.
 
 ## Stack
 
@@ -31,11 +31,12 @@ Authentication currently provides registration, sign-in, in-memory browser sign-
 - `GET /api/v1/dashboard` — workspace-scoped stalled lead and quote totals
 - `/api/v1/leads` — workspace-scoped lead CRUD
 - `/api/v1/quotes` — workspace-scoped quote CRUD, including validation of linked leads
+- `GET /api/v1/opportunities` — rules-based stalled lead and quote detection
 - `GET /health` — liveness check
 
 Every tenant-owned query is scoped by an authenticated workspace membership. Secrets are read from environment variables and never sent to the browser.
 
 ## Remaining product phases
 
-Next: conversations and customer interactions, dedicated opportunity records and prioritization, AI-assisted recommendations, retrieval over business policies, and human-approved action execution. Email integrations and password reset require a configured delivery provider. See [ARCHITECTURE.md](ARCHITECTURE.md) for boundaries and tenancy rules.
+Next: conversation records and customer interactions, AI-assisted recommendations, retrieval over business policies, and human-approved action execution. Email integrations and password reset require a configured delivery provider. See [ARCHITECTURE.md](ARCHITECTURE.md) for boundaries and tenancy rules.
 

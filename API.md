@@ -42,5 +42,9 @@ Lead statuses are `NEW`, `CONTACTED`, `QUALIFIED`, `QUOTED`, `NEGOTIATING`, `WON
 
 Quote statuses are `DRAFT`, `SENT`, `VIEWED`, `NEGOTIATING`, `ACCEPTED`, `REJECTED`, and `EXPIRED`. Quote numbers must be unique within a workspace. A linked lead must belong to the same workspace.
 
+## Revenue opportunities
+
+`GET /api/v1/opportunities` returns deterministic follow-up opportunities for active leads and sent quotes waiting at least seven days. Each result includes its source record, amount, wait time, priority, reason, and suggested next step. Priority comes from fixed age and value thresholds; no LLM is used for detection and no message is sent automatically.
+
 Every lead and quote endpoint requires the protected-request headers described above. The API checks membership first, then scopes record queries to the selected workspace.
 

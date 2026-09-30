@@ -26,5 +26,5 @@ Business data → deterministic opportunity detector → AI analysis/retrieval
               → safety validator → approval queue → action executor → audit log
 ```
 
-The detector remains deterministic. LLM reasoning will be structured and advisory, and must never call external providers directly.
+The implemented opportunity detector is a deterministic service over workspace leads and quotes. It identifies active records waiting at least seven days and assigns priority from fixed age and value thresholds. LLM reasoning will be structured and advisory, and must never call external providers directly.
 
