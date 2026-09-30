@@ -1,6 +1,6 @@
 # Architecture
 
-## Phase 1 request path
+## Request path
 
 ```text
 React client → FastAPI routes → authentication/workspace dependencies → SQLAlchemy → PostgreSQL
@@ -10,7 +10,7 @@ React client → FastAPI routes → authentication/workspace dependencies → SQ
 
 ## Tenant isolation
 
-Users belong to workspaces through `workspace_members`. The initial registration flow creates a workspace and owner membership atomically. Protected routes require a valid bearer token and an explicit workspace selection. The API verifies membership before returning workspace data. Tenant-owned tables introduced in later phases must include `workspace_id`, and every read or write must constrain by that ID.
+Users belong to workspaces through `workspace_members`. The initial registration flow creates a workspace and owner membership atomically. Protected routes require a valid bearer token and an explicit workspace selection. The API verifies membership before returning workspace data. Leads and quotes each carry `workspace_id`; every record read, update, and delete is scoped to that ID. Quote-to-lead links are checked against the same workspace.
 
 ## Security boundaries
 
@@ -27,3 +27,4 @@ Business data → deterministic opportunity detector → AI analysis/retrieval
 ```
 
 The detector remains deterministic. LLM reasoning will be structured and advisory, and must never call external providers directly.
+

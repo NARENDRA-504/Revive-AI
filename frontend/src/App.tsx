@@ -15,6 +15,12 @@ type Dashboard = {
   pending_approvals: number
   recovered_this_month: number
 }
+type LeadStatus = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'QUOTED' | 'NEGOTIATING' | 'WON' | 'LOST' | 'INACTIVE'
+type QuoteStatus = 'DRAFT' | 'SENT' | 'VIEWED' | 'NEGOTIATING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED'
+type Lead = { id: string; name: string; company: string | null; email: string | null; phone: string | null; source: string | null; status: LeadStatus; estimated_value: number; next_followup_at: string | null; last_contacted_at: string | null; notes: string | null; created_at: string; updated_at: string }
+type Quote = { id: string; lead_id: string | null; quote_number: string; amount: number; currency: string; status: QuoteStatus; sent_at: string | null; expires_at: string | null; accepted_at: string | null; rejected_at: string | null; created_at: string; updated_at: string }
+const leadStatuses: LeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED', 'QUOTED', 'NEGOTIATING', 'WON', 'LOST', 'INACTIVE']
+const quoteStatuses: QuoteStatus[] = ['DRAFT', 'SENT', 'VIEWED', 'NEGOTIATING', 'ACCEPTED', 'REJECTED', 'EXPIRED']
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
@@ -25,6 +31,10 @@ export default function App() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [loadingDashboard, setLoadingDashboard] = useState(false)
+  const [activePage, setActivePage] = useState<'overview' | 'leads' | 'quotes'>('overview')
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [quotes, setQuotes] = useState<Quote[]>([])
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     const workspace = session?.workspaces[0]
@@ -55,6 +65,76 @@ export default function App() {
 
     return () => controller.abort()
   }, [session])
+
+  useEffect(() => {
+    const workspace = session?.workspaces[0]
+    if (!session || !workspace) return
+    const headers = { Authorization: `Bearer ${session.access_token}`, 'X-Workspace-ID': workspace.id }
+    const controller = new AbortController()
+    Promise.all([
+      fetch(`${API}/api/v1/leads`, { headers, signal: controller.signal }).then(async (r) => { if (!r.ok) throw new Error('Could not load leads.'); return r.json() as Promise<Lead[]> }),
+      fetch(`${API}/api/v1/quotes`, { headers, signal: controller.signal }).then(async (r) => { if (!r.ok) throw new Error('Could not load quotes.'); return r.json() as Promise<Quote[]> }),
+    ]).then(([leadRows, quoteRows]) => { setLeads(leadRows); setQuotes(quoteRows) })
+      .catch((cause: unknown) => { if (cause instanceof DOMException && cause.name === 'AbortError') return; setError(cause instanceof Error ? cause.message : 'Could not load workspace data.') })
+    return () => controller.abort()
+  }, [session])
+
+  async function saveRecord(event: FormEvent<HTMLFormElement>, kind: 'leads' | 'quotes') {
+    event.preventDefault()
+    if (!session) return
+    setSaving(true)
+    setError('')
+    const formNode = event.currentTarget
+    const form = new FormData(formNode)
+    const value = (key: string) => String(form.get(key) ?? '')
+    const payload = kind === 'leads' ? {
+      name: value('name'), company: value('company') || null, email: value('email') || null,
+      phone: value('phone') || null, source: value('source') || null, status: value('status'),
+      estimated_value: Number(value('estimated_value') || 0), next_followup_at: value('next_followup_at') ? new Date(value('next_followup_at')).toISOString() : null,
+      notes: value('notes') || null,
+    } : {
+      lead_id: value('lead_id') || null, quote_number: value('quote_number'), amount: Number(value('amount')),
+      currency: value('currency').toUpperCase(), status: value('status'),
+      sent_at: value('sent_at') ? new Date(value('sent_at')).toISOString() : null,
+      expires_at: value('expires_at') ? new Date(value('expires_at')).toISOString() : null,
+    }
+    try {
+      const response = await fetch(`${API}/api/v1/${kind}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, 'X-Workspace-ID': session.workspaces[0].id },
+        body: JSON.stringify(payload),
+      })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.detail ?? `Could not save ${kind.slice(0, -1)}.`)
+      if (kind === 'leads') setLeads((old) => [body as Lead, ...old])
+      else setQuotes((old) => [body as Quote, ...old])
+      formNode.reset()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save this record.') }
+    finally { setSaving(false) }
+  }
+
+  async function removeRecord(kind: 'leads' | 'quotes', id: string) {
+    if (!session) return
+    const response = await fetch(`${API}/api/v1/${kind}/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}`, 'X-Workspace-ID': session.workspaces[0].id } })
+    if (!response.ok) { setError(`Could not delete this ${kind === 'leads' ? 'lead' : 'quote'}.`); return }
+    if (kind === 'leads') setLeads((old) => old.filter((lead) => lead.id !== id))
+    else setQuotes((old) => old.filter((quote) => quote.id !== id))
+  }
+
+  async function updateLeadStatus(lead: Lead, status: LeadStatus) {
+    if (!session) return
+    const response = await fetch(`${API}/api/v1/leads/${lead.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, 'X-Workspace-ID': session.workspaces[0].id }, body: JSON.stringify({ ...lead, status }) })
+    if (!response.ok) { setError('Could not update lead status.'); return }
+    const updated = await response.json() as Lead
+    setLeads((old) => old.map((item) => item.id === lead.id ? updated : item))
+  }
+
+  async function updateQuoteStatus(quote: Quote, status: QuoteStatus) {
+    if (!session) return
+    const response = await fetch(`${API}/api/v1/quotes/${quote.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, 'X-Workspace-ID': session.workspaces[0].id }, body: JSON.stringify({ ...quote, status }) })
+    if (!response.ok) { setError('Could not update quote status.'); return }
+    const updated = await response.json() as Quote
+    setQuotes((old) => old.map((item) => item.id === quote.id ? updated : item))
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -160,10 +240,10 @@ export default function App() {
           <span className="chevron">⌄</span>
         </div>
         <div className="nav-label">WORKSPACE</div>
-        <a className="side-link active" href="#overview"><span>◫</span> Overview</a>
+        <button className={`side-link ${activePage === 'overview' ? 'active' : ''}`} onClick={() => setActivePage('overview')}><span>◫</span> Overview</button>
+        <button className={`side-link ${activePage === 'leads' ? 'active' : ''}`} onClick={() => setActivePage('leads')}><span>↗</span> Leads <small>{leads.length}</small></button>
+        <button className={`side-link ${activePage === 'quotes' ? 'active' : ''}`} onClick={() => setActivePage('quotes')}><span>▤</span> Quotes <small>{quotes.length}</small></button>
         <a className="side-link" href="#opportunities"><span>◎</span> Opportunities <small>{metrics.stalled_quotes + metrics.stalled_leads}</small></a>
-        <a className="side-link" href="#getting-started"><span>↗</span> Leads</a>
-        <a className="side-link" href="#getting-started"><span>▤</span> Quotes</a>
         <a className="side-link" href="#actions"><span>✳</span> AI actions <small className="count">{metrics.pending_approvals}</small></a>
         <div className="nav-label second">MANAGE</div>
         <a className="side-link" href="#knowledge"><span>▧</span> Knowledge base</a>
@@ -180,21 +260,21 @@ export default function App() {
 
       <main className="dashboard" id="overview">
         <header className="topbar">
-          <div className="breadcrumb">Workspace <span>/</span> Overview</div>
+          <div className="breadcrumb">Workspace <span>/</span> {activePage[0].toUpperCase() + activePage.slice(1)}</div>
           <div className="top-actions"><span className="live-dot">● &nbsp;Workspace connected</span><div className="profile-avatar small-avatar">{session.user.name.slice(0, 1).toUpperCase()}</div></div>
         </header>
         <div className="dash-content">
           <div className="welcome-row">
             <div>
               <div className="eyebrow">{new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: '2-digit', year: 'numeric' }).format(new Date()).toUpperCase()}</div>
-              <h1>Good morning, {firstName} <span>✳</span></h1>
-              <p>Here’s where your business stands today.</p>
+              <h1>{activePage === 'overview' ? <>Good morning, {firstName} <span>✳</span></> : activePage === 'leads' ? 'Leads' : 'Quotes'}</h1>
+              <p>{activePage === 'overview' ? 'Here’s where your business stands today.' : activePage === 'leads' ? 'Keep prospects, follow-ups, and potential value in one place.' : 'Track sent quotations and see which customers need a follow-up.'}</p>
             </div>
-            <button className="outline-button" onClick={() => window.location.reload()}>↻ &nbsp; Refresh overview</button>
+            <button className="outline-button" onClick={() => session && setSession({ ...session })}>↻ &nbsp; Refresh overview</button>
           </div>
 
           {error && <div className="error dashboard-error" role="alert">{error}</div>}
-          <section className="risk-card">
+          {activePage === 'overview' && <section className="risk-card">
             <div className="risk-main">
               <div className="eyebrow">TOTAL REVENUE AT RISK <span className="info">i</span></div>
               <div className="risk-amount">${metrics.revenue_at_risk.toLocaleString('en-US')}<span>.00</span></div>
@@ -207,9 +287,10 @@ export default function App() {
               <div className="risk-stat"><span className="stat-icon violet">↗</span><span>Stalled leads</span><b>{metrics.stalled_leads}</b></div>
               <div className="risk-stat"><span className="stat-icon teal">✉</span><span>Unanswered inquiries</span><b>{metrics.unanswered_customers}</b></div>
             </div>
-          </section>
+          </section>}
 
-          <div className="section-line"><div><div className="eyebrow">A CLEAR PATH FORWARD</div><h2>Your recovery overview</h2></div><span className="quiet-button">Updated just now</span></div>
+          {activePage === 'overview' ? <>
+          <div className="section-line"><div><div className="eyebrow">A CLEAR PATH FORWARD</div><h2>Your recovery overview</h2></div><span className="quiet-button">{leads.length} leads · {quotes.length} quotes</span></div>
           <section className="summary-grid">
             <article className="summary-card"><div className="summary-top"><span>◎</span><small>IN YOUR PIPELINE</small></div><strong>{metrics.stalled_quotes + metrics.stalled_leads}</strong><p>Open opportunities</p><div className="summary-foot">Waiting for a next step <span>→</span></div></article>
             <article className="summary-card"><div className="summary-top"><span>✳</span><small>HUMAN-IN-THE-LOOP</small></div><strong>{metrics.pending_approvals}</strong><p>Actions to review</p><div className="summary-foot">You stay in control <span>→</span></div></article>
@@ -226,7 +307,7 @@ export default function App() {
               <div><span>02</span><b>Track quotations</b><small>See which sent quotes are waiting for a reply.</small></div>
               <div><span>03</span><b>Recover revenue</b><small>Review clear next steps before any action is sent.</small></div>
             </div>
-            <div className="phase-note">LEAD AND QUOTE ENTRY IS THE NEXT FEATURE PHASE</div>
+            <div className="phase-note">ADD YOUR BUSINESS RECORDS FROM LEADS OR QUOTES IN THE SIDEBAR</div>
           </section>
 
           <section className="example-opportunity" id="opportunities">
@@ -234,9 +315,27 @@ export default function App() {
             <div className="example-row"><div className="example-icon">◷</div><div className="example-copy"><b>Quote follow-up</b><span>Northstar Studio · Sent 8 days ago · No reply yet</span></div><strong>$4,800</strong></div>
             <div className="example-reason">Suggested next step <b>Review a personalized follow-up draft</b><span>Sample only · This is not data from your workspace</span></div>
           </section>
+          </> : activePage === 'leads' ? <section className="data-page">
+            <form className="record-form" onSubmit={(event) => saveRecord(event, 'leads')}>
+              <div className="eyebrow">ADD TO YOUR PIPELINE</div><h2>New lead</h2>
+              <div className="form-grid"><label>Name *<input name="name" required maxLength={160} placeholder="Maya Chen" /></label><label>Company<input name="company" maxLength={160} placeholder="Company name" /></label><label>Email<input name="email" type="email" placeholder="maya@company.com" /></label><label>Phone<input name="phone" maxLength={40} placeholder="Phone number" /></label><label>Source<input name="source" maxLength={80} placeholder="Referral, website…" /></label><label>Estimated value<input name="estimated_value" type="number" min="0" step="0.01" defaultValue="0" /></label><label>Status<select name="status" defaultValue="NEW">{leadStatuses.map((status) => <option key={status}>{status}</option>)}</select></label><label>Next follow-up<input name="next_followup_at" type="datetime-local" /></label></div>
+              <label>Notes<textarea name="notes" maxLength={4000} rows={3} placeholder="Context and next steps" /></label><button className="primary" disabled={saving}>{saving ? 'Saving…' : 'Add lead'} <span>↗</span></button>
+            </form>
+            <div className="section-line"><div><div className="eyebrow">YOUR PIPELINE</div><h2>{leads.length} {leads.length === 1 ? 'lead' : 'leads'}</h2></div></div>
+            {leads.length === 0 ? <div className="list-empty">No leads yet. Add your first lead above to start building your pipeline.</div> : <div className="record-list">{leads.map((lead) => <article className="record-row" key={lead.id}><div className="record-avatar">{lead.name.slice(0, 1).toUpperCase()}</div><div className="record-primary"><b>{lead.name}</b><span>{[lead.company, lead.email].filter(Boolean).join(' · ') || 'No company or email added'}</span></div><strong>${Number(lead.estimated_value).toLocaleString('en-US')}</strong><select aria-label={`Status for ${lead.name}`} value={lead.status} onChange={(event) => updateLeadStatus(lead, event.target.value as LeadStatus)}>{leadStatuses.map((status) => <option key={status}>{status}</option>)}</select><button className="delete-record" onClick={() => removeRecord('leads', lead.id)}>Delete</button></article>)}</div>}
+          </section> : <section className="data-page">
+            <form className="record-form" onSubmit={(event) => saveRecord(event, 'quotes')}>
+              <div className="eyebrow">TRACK A CUSTOMER QUOTATION</div><h2>New quote</h2>
+              <div className="form-grid"><label>Quote number *<input name="quote_number" required maxLength={64} placeholder="Q-2026-001" /></label><label>Amount *<input name="amount" type="number" min="0" step="0.01" required placeholder="4800" /></label><label>Currency<select name="currency" defaultValue="USD">{['USD', 'INR', 'EUR', 'GBP', 'CAD', 'AUD'].map((currency) => <option key={currency}>{currency}</option>)}</select></label><label>Linked lead<select name="lead_id" defaultValue=""><option value="">No linked lead</option>{leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.name}{lead.company ? ` · ${lead.company}` : ''}</option>)}</select></label><label>Status<select name="status" defaultValue="DRAFT">{quoteStatuses.map((status) => <option key={status}>{status}</option>)}</select></label><label>Sent at<input name="sent_at" type="datetime-local" /></label><label>Expires at<input name="expires_at" type="datetime-local" /></label></div>
+              <button className="primary" disabled={saving}>{saving ? 'Saving…' : 'Add quote'} <span>↗</span></button>
+            </form>
+            <div className="section-line"><div><div className="eyebrow">QUOTATION TRACKER</div><h2>{quotes.length} {quotes.length === 1 ? 'quote' : 'quotes'}</h2></div></div>
+            {quotes.length === 0 ? <div className="list-empty">No quotes yet. Add a quote above to track its status and follow-up.</div> : <div className="record-list">{quotes.map((quote) => { const lead = leads.find((item) => item.id === quote.lead_id); return <article className="record-row" key={quote.id}><div className="quote-icon">▤</div><div className="record-primary"><b>{quote.quote_number}</b><span>{lead?.name ?? 'No linked lead'} · {quote.currency}</span></div><strong>{quote.currency} {Number(quote.amount).toLocaleString('en-US')}</strong><select aria-label={`Status for quote ${quote.quote_number}`} value={quote.status} onChange={(event) => updateQuoteStatus(quote, event.target.value as QuoteStatus)}>{quoteStatuses.map((status) => <option key={status}>{status}</option>)}</select><button className="delete-record" onClick={() => removeRecord('quotes', quote.id)}>Delete</button></article>})}</div>}
+          </section>}
           <footer className="dash-footer"><span>REVIVEAI &nbsp;·&nbsp; RECOVER WHAT’S ALREADY YOURS</span><span>BUILT FOR SMALL BUSINESS, WITH CARE <i>✳</i></span></footer>
         </div>
       </main>
     </div>
   )
 }
+

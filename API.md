@@ -22,4 +22,25 @@ Returns an access token, user, and initial workspace. Email addresses are normal
 
 ## Dashboard
 
-`GET /api/v1/dashboard` returns the selected workspace name and zeroed Phase 1 revenue metrics. Future phases will derive these values from persisted business records.
+`GET /api/v1/dashboard` derives at-risk totals from sent quotes and inactive leads that have been waiting for at least seven days.
+
+## Leads
+
+- `GET /api/v1/leads` lists leads in the selected workspace.
+- `POST /api/v1/leads` creates a lead.
+- `PUT /api/v1/leads/{lead_id}` updates a lead.
+- `DELETE /api/v1/leads/{lead_id}` deletes a lead.
+
+Lead statuses are `NEW`, `CONTACTED`, `QUALIFIED`, `QUOTED`, `NEGOTIATING`, `WON`, `LOST`, and `INACTIVE`. Leads include contact details, source, estimated value, follow-up dates, and notes.
+
+## Quotes
+
+- `GET /api/v1/quotes` lists quotes in the selected workspace.
+- `POST /api/v1/quotes` creates a quote.
+- `PUT /api/v1/quotes/{quote_id}` updates a quote.
+- `DELETE /api/v1/quotes/{quote_id}` deletes a quote.
+
+Quote statuses are `DRAFT`, `SENT`, `VIEWED`, `NEGOTIATING`, `ACCEPTED`, `REJECTED`, and `EXPIRED`. Quote numbers must be unique within a workspace. A linked lead must belong to the same workspace.
+
+Every lead and quote endpoint requires the protected-request headers described above. The API checks membership first, then scopes record queries to the selected workspace.
+

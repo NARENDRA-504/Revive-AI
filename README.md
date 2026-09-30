@@ -2,9 +2,9 @@
 
 ReviveAI helps small service businesses find stalled leads and quotations, understand why revenue is at risk, and prepare safe, human-approved recovery actions.
 
-## Phase 1 foundation
+## Current phase: core business data
 
-This first phase establishes a React client, FastAPI API, PostgreSQL persistence, password-based authentication, workspace membership, Docker development environment, and Alembic migrations. Revenue detection and AI features are intentionally not part of this foundation phase.
+The foundation includes a React client, FastAPI API, PostgreSQL persistence, password-based authentication, workspace membership, Docker development environment, and Alembic migrations. The core data phase adds workspace-scoped lead and quote management with create, list, update, and delete operations. The dashboard derives its stalled lead and quote totals from saved workspace records.
 
 ## Stack
 
@@ -23,16 +23,19 @@ The backend container applies Alembic migrations before starting. For local back
 
 Authentication currently provides registration, sign-in, in-memory browser sign-out, profile updates, and workspace creation/renaming. Password reset is not enabled yet because no email delivery provider is configured; do not add a reset endpoint that exposes reset tokens directly to callers.
 
-## Initial endpoints
+## API endpoints
 
 - `POST /api/v1/auth/register` — create a user and their first workspace
 - `POST /api/v1/auth/login` — authenticate and return a bearer token
 - `GET /api/v1/auth/me` — current user and workspace memberships
-- `GET /api/v1/dashboard` — workspace-scoped dashboard foundation
+- `GET /api/v1/dashboard` — workspace-scoped stalled lead and quote totals
+- `/api/v1/leads` — workspace-scoped lead CRUD
+- `/api/v1/quotes` — workspace-scoped quote CRUD, including validation of linked leads
 - `GET /health` — liveness check
 
 Every tenant-owned query is scoped by an authenticated workspace membership. Secrets are read from environment variables and never sent to the browser.
 
-## Next phase
+## Remaining product phases
 
-Add customer, lead, quote, and conversation records, then deterministic revenue-opportunity detection. See [ARCHITECTURE.md](ARCHITECTURE.md) for boundaries and tenancy rules.
+Next: conversations and customer interactions, dedicated opportunity records and prioritization, AI-assisted recommendations, retrieval over business policies, and human-approved action execution. Email integrations and password reset require a configured delivery provider. See [ARCHITECTURE.md](ARCHITECTURE.md) for boundaries and tenancy rules.
+
