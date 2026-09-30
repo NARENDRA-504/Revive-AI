@@ -46,5 +46,13 @@ Quote statuses are `DRAFT`, `SENT`, `VIEWED`, `NEGOTIATING`, `ACCEPTED`, `REJECT
 
 `GET /api/v1/opportunities` returns deterministic follow-up opportunities for active leads and sent quotes waiting at least seven days. Each result includes its source record, amount, wait time, priority, reason, and suggested next step. Priority comes from fixed age and value thresholds; no LLM is used for detection and no message is sent automatically.
 
+## Conversations
+
+- `GET /api/v1/conversations` lists workspace conversations with their message timelines.
+- `POST /api/v1/conversations` creates a conversation and its first logged message.
+- `POST /api/v1/conversations/{conversation_id}/messages` adds a logged customer message or team follow-up draft.
+
+Each conversation may link to a lead in the same workspace. `OUTBOUND` entries are stored as drafts/history only; these endpoints do not send email or contact customers.
+
 Every lead and quote endpoint requires the protected-request headers described above. The API checks membership first, then scopes record queries to the selected workspace.
 

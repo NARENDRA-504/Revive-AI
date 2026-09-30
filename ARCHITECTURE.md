@@ -10,7 +10,7 @@ React client → FastAPI routes → authentication/workspace dependencies → SQ
 
 ## Tenant isolation
 
-Users belong to workspaces through `workspace_members`. The initial registration flow creates a workspace and owner membership atomically. Protected routes require a valid bearer token and an explicit workspace selection. The API verifies membership before returning workspace data. Leads and quotes each carry `workspace_id`; every record read, update, and delete is scoped to that ID. Quote-to-lead links are checked against the same workspace.
+Users belong to workspaces through `workspace_members`. The initial registration flow creates a workspace and owner membership atomically. Protected routes require a valid bearer token and an explicit workspace selection. The API verifies membership before returning workspace data. Leads, quotes, and conversations carry `workspace_id`; every record read or write is scoped to that ID. Quote-to-lead and conversation-to-lead links are checked against the same workspace. Conversation messages are stored under a workspace-scoped conversation and are not sent to external services.
 
 ## Security boundaries
 

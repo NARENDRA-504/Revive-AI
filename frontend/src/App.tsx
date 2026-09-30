@@ -21,6 +21,8 @@ type QuoteStatus = 'DRAFT' | 'SENT' | 'VIEWED' | 'NEGOTIATING' | 'ACCEPTED' | 'R
 type Lead = { id: string; name: string; company: string | null; email: string | null; phone: string | null; source: string | null; status: LeadStatus; estimated_value: number; next_followup_at: string | null; last_contacted_at: string | null; notes: string | null; created_at: string; updated_at: string }
 type Quote = { id: string; lead_id: string | null; quote_number: string; amount: number; currency: string; status: QuoteStatus; sent_at: string | null; expires_at: string | null; accepted_at: string | null; rejected_at: string | null; created_at: string; updated_at: string }
 type Opportunity = { id: string; source_type: 'lead' | 'quote'; source_id: string; title: string; customer: string; amount: number; currency: string; days_waiting: number; priority: 'HIGH' | 'MEDIUM' | 'LOW'; reason: string; recommended_action: string }
+type Message = { id: string; conversation_id: string; sender: string | null; recipient: string | null; direction: 'INBOUND' | 'OUTBOUND'; content: string; timestamp: string }
+type Conversation = { id: string; lead_id: string | null; channel: string; subject: string; status: string; messages: Message[] }
 const leadStatuses: LeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED', 'QUOTED', 'NEGOTIATING', 'WON', 'LOST', 'INACTIVE']
 const quoteStatuses: QuoteStatus[] = ['DRAFT', 'SENT', 'VIEWED', 'NEGOTIATING', 'ACCEPTED', 'REJECTED', 'EXPIRED']
 
@@ -33,10 +35,12 @@ export default function App() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [loadingDashboard, setLoadingDashboard] = useState(false)
-  const [activePage, setActivePage] = useState<'overview' | 'leads' | 'quotes' | 'opportunities'>('overview')
+  const [activePage, setActivePage] = useState<'overview' | 'leads' | 'quotes' | 'opportunities' | 'conversations'>('overview')
   const [leads, setLeads] = useState<Lead[]>([])
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [editingLead, setEditingLead] = useState<Lead | null>(null)
   const [editingQuote, setEditingQuote] = useState<Quote | null>(null)
@@ -81,7 +85,8 @@ export default function App() {
       fetch(`${API}/api/v1/leads`, { headers, signal: controller.signal }).then(async (r) => { if (!r.ok) throw new Error('Could not load leads.'); return r.json() as Promise<Lead[]> }),
       fetch(`${API}/api/v1/quotes`, { headers, signal: controller.signal }).then(async (r) => { if (!r.ok) throw new Error('Could not load quotes.'); return r.json() as Promise<Quote[]> }),
       fetch(`${API}/api/v1/opportunities`, { headers, signal: controller.signal }).then(async (r) => { if (!r.ok) throw new Error('Could not load opportunities.'); return r.json() as Promise<Opportunity[]> }),
-    ]).then(([leadRows, quoteRows, opportunityRows]) => { setLeads(leadRows); setQuotes(quoteRows); setOpportunities(opportunityRows) })
+      fetch(`${API}/api/v1/conversations`, { headers, signal: controller.signal }).then(async (r) => { if (!r.ok) throw new Error('Could not load conversations.'); return r.json() as Promise<Conversation[]> }),
+    ]).then(([leadRows, quoteRows, opportunityRows, conversationRows]) => { setLeads(leadRows); setQuotes(quoteRows); setOpportunities(opportunityRows); setConversations(conversationRows); setSelectedConversationId((current) => current ?? conversationRows[0]?.id ?? null) })
       .catch((cause: unknown) => { if (cause instanceof DOMException && cause.name === 'AbortError') return; setError(cause instanceof Error ? cause.message : 'Could not load workspace data.') })
     return () => controller.abort()
   }, [session, refreshKey])
@@ -151,6 +156,41 @@ export default function App() {
     const updated = await response.json() as Quote
     setQuotes((old) => old.map((item) => item.id === quote.id ? updated : item))
     setRefreshKey((current) => current + 1)
+  }
+
+  async function logConversation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!session) return
+    const formNode = event.currentTarget
+    const form = new FormData(formNode)
+    const value = (key: string) => String(form.get(key) ?? '')
+    setSaving(true)
+    setError('')
+    try {
+      const response = await fetch(`${API}/api/v1/conversations`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, 'X-Workspace-ID': session.workspaces[0].id }, body: JSON.stringify({ lead_id: value('lead_id') || null, channel: value('channel'), subject: value('subject'), first_message: { direction: value('direction'), content: value('content'), sender: value('sender') || null, recipient: value('recipient') || null } }) })
+      const body = await response.json() as Conversation & { detail?: string }
+      if (!response.ok) throw new Error(body.detail ?? 'Could not save this conversation.')
+      setConversations((old) => [body, ...old])
+      setSelectedConversationId(body.id)
+      formNode.reset()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save this conversation.') }
+    finally { setSaving(false) }
+  }
+
+  async function logMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!session || !selectedConversationId) return
+    const formNode = event.currentTarget
+    const form = new FormData(formNode)
+    const direction = String(form.get('direction')) as Message['direction']
+    const content = String(form.get('content') ?? '')
+    const selected = conversations.find((item) => item.id === selectedConversationId)
+    const lead = leads.find((item) => item.id === selected?.lead_id)
+    const response = await fetch(`${API}/api/v1/conversations/${selectedConversationId}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, 'X-Workspace-ID': session.workspaces[0].id }, body: JSON.stringify({ direction, content, sender: direction === 'OUTBOUND' ? session.user.email : lead?.email, recipient: direction === 'OUTBOUND' ? lead?.email : session.user.email }) })
+    const body = await response.json() as Message & { detail?: string }
+    if (!response.ok) { setError(body.detail ?? 'Could not save this message.'); return }
+    setConversations((old) => old.map((item) => item.id === selectedConversationId ? { ...item, messages: [...item.messages, body] } : item))
+    formNode.reset()
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -262,13 +302,14 @@ export default function App() {
         <button className={`side-link ${activePage === 'overview' ? 'active' : ''}`} onClick={() => setActivePage('overview')}><span>◫</span> Overview</button>
         <button className={`side-link ${activePage === 'leads' ? 'active' : ''}`} onClick={() => setActivePage('leads')}><span>↗</span> Leads <small>{leads.length}</small></button>
         <button className={`side-link ${activePage === 'quotes' ? 'active' : ''}`} onClick={() => setActivePage('quotes')}><span>▤</span> Quotes <small>{quotes.length}</small></button>
+        <button className={`side-link ${activePage === 'conversations' ? 'active' : ''}`} onClick={() => setActivePage('conversations')}><span>✉</span> Conversations <small>{conversations.length}</small></button>
         <button className={`side-link ${activePage === 'opportunities' ? 'active' : ''}`} onClick={() => setActivePage('opportunities')}><span>◎</span> Opportunities <small>{opportunities.length}</small></button>
-        <a className="side-link" href="#actions"><span>✳</span> AI actions <small className="count">{metrics.pending_approvals}</small></a>
+        <button className="side-link future-link" disabled><span>✳</span> AI actions <small>Soon</small></button>
         <div className="nav-label second">MANAGE</div>
-        <a className="side-link" href="#knowledge"><span>▧</span> Knowledge base</a>
-        <a className="side-link" href="#settings"><span>⚙</span> Settings</a>
+        <button className="side-link future-link" disabled><span>▧</span> Knowledge base <small>Soon</small></button>
+        <button className="side-link future-link" disabled><span>⚙</span> Settings <small>Soon</small></button>
         <div className="sidebar-bottom">
-          <div className="help-card"><span>✳</span><b>Revenue, recovered.</b><p>Your AI teammate is ready to help you follow through.</p><a href="#getting-started">See how it works ↗</a></div>
+          <div className="help-card"><span>✳</span><b>Revenue, recovered.</b><p>Add leads and quotes to surface the follow-ups that need attention.</p><a href="#getting-started">See how it works ↗</a></div>
           <div className="profile">
             <div className="profile-avatar">{session.user.name.slice(0, 1).toUpperCase()}</div>
             <span><b>{session.user.name}</b><small>{session.user.email}</small></span>
@@ -286,8 +327,8 @@ export default function App() {
           <div className="welcome-row">
             <div>
               <div className="eyebrow">{new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: '2-digit', year: 'numeric' }).format(new Date()).toUpperCase()}</div>
-              <h1>{activePage === 'overview' ? <>Good morning, {firstName} <span>✳</span></> : activePage === 'leads' ? 'Leads' : activePage === 'quotes' ? 'Quotes' : 'Opportunities'}</h1>
-              <p>{activePage === 'overview' ? 'Here’s where your business stands today.' : activePage === 'leads' ? 'Keep prospects, follow-ups, and potential value in one place.' : activePage === 'quotes' ? 'Track sent quotations and see which customers need a follow-up.' : 'A clear, rules-based view of follow-ups waiting for attention.'}</p>
+              <h1>{activePage === 'overview' ? <>Good morning, {firstName} <span>✳</span></> : activePage === 'leads' ? 'Leads' : activePage === 'quotes' ? 'Quotes' : activePage === 'conversations' ? 'Conversations' : 'Opportunities'}</h1>
+              <p>{activePage === 'overview' ? 'Here’s where your business stands today.' : activePage === 'leads' ? 'Keep prospects, follow-ups, and potential value in one place.' : activePage === 'quotes' ? 'Track sent quotations and see which customers need a follow-up.' : activePage === 'conversations' ? 'Keep a shared record of customer replies and follow-up drafts.' : 'A clear, rules-based view of follow-ups waiting for attention.'}</p>
             </div>
             <button className="outline-button" onClick={() => setRefreshKey((current) => current + 1)}>↻ &nbsp; Refresh overview</button>
           </div>
@@ -350,10 +391,19 @@ export default function App() {
             </form>
             <div className="section-line"><div><div className="eyebrow">QUOTATION TRACKER</div><h2>{quotes.length} {quotes.length === 1 ? 'quote' : 'quotes'}</h2></div></div>
             {quotes.length === 0 ? <div className="list-empty">No quotes yet. Add a quote above to track its status and follow-up.</div> : <div className="record-list">{quotes.map((quote) => { const lead = leads.find((item) => item.id === quote.lead_id); return <article className="record-row" key={quote.id}><div className="quote-icon">▤</div><div className="record-primary"><b>{quote.quote_number}</b><span>{lead?.name ?? 'No linked lead'} · {quote.currency}</span></div><strong>{quote.currency} {Number(quote.amount).toLocaleString('en-US')}</strong><select aria-label={`Status for quote ${quote.quote_number}`} value={quote.status} onChange={(event) => updateQuoteStatus(quote, event.target.value as QuoteStatus)}>{quoteStatuses.map((status) => <option key={status}>{status}</option>)}</select><button className="edit-record" onClick={() => { setEditingQuote(quote); document.querySelector('.data-page')?.scrollIntoView({ behavior: 'smooth' }) }}>Edit</button><button className="delete-record" onClick={() => removeRecord('quotes', quote.id)}>Delete</button></article>})}</div>}
-          </section> : <section className="opportunity-page">
+          </section> : activePage === 'opportunities' ? <section className="opportunity-page">
             <div className="opportunity-intro"><div><div className="eyebrow">DETERMINISTIC DETECTION · 7+ DAYS WAITING</div><h2>{opportunities.length ? `${opportunities.length} follow-up${opportunities.length === 1 ? '' : 's'} to review` : 'Nothing is waiting too long'}</h2><p>ReviveAI checks lead and quote status plus the last recorded follow-up date. These are rule-based signals from your workspace data.</p></div><span className="rules-badge">RULES-BASED</span></div>
             {opportunities.length === 0 ? <div className="list-empty">No stalled leads or quotes found. Add records and follow-up dates to keep your pipeline current.</div> : <div className="opportunity-list">{opportunities.map((item) => <article className="opportunity-card" key={item.id}><div className={`priority-mark ${item.priority.toLowerCase()}`}>{item.priority}</div><div className="opportunity-details"><div className="opportunity-heading"><h3>{item.title}</h3><span>{item.days_waiting} days waiting</span></div><div className="opportunity-customer">{item.customer} · {item.source_type === 'quote' ? 'Quotation' : 'Lead'}</div><p>{item.reason}</p><div className="opportunity-next"><span>Suggested next step</span><b>{item.recommended_action}</b></div></div><strong className="opportunity-amount">{item.currency} {Number(item.amount).toLocaleString('en-US')}</strong></article>)}</div>}
             <div className="opportunity-disclaimer">Suggestions only. ReviveAI does not send messages or take actions automatically.</div>
+          </section> : <section className="conversation-page">
+            <form key="new-conversation" className="record-form conversation-form" onSubmit={logConversation}>
+              <div className="eyebrow">CUSTOMER HISTORY</div><h2>Log a conversation</h2>
+              <div className="form-grid"><label>Lead<select name="lead_id" defaultValue=""><option value="">Unlinked conversation</option>{leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.name}{lead.company ? ` · ${lead.company}` : ''}</option>)}</select></label><label>Channel<select name="channel" defaultValue="EMAIL">{['EMAIL', 'PHONE', 'MEETING', 'OTHER'].map((channel) => <option key={channel}>{channel}</option>)}</select></label><label>Direction<select name="direction" defaultValue="INBOUND"><option value="INBOUND">Customer message</option><option value="OUTBOUND">Our follow-up draft</option></select></label><label>Subject<input name="subject" required maxLength={240} placeholder="Project proposal follow-up" /></label></div>
+              <div className="form-grid"><label>Sender<input name="sender" type="email" placeholder="sender@example.com" /></label><label>Recipient<input name="recipient" type="email" placeholder="recipient@example.com" /></label></div><label>Message *<textarea name="content" required maxLength={12000} rows={3} placeholder="Write a note or paste the customer message…" /></label><div className="form-actions"><button className="primary" disabled={saving}>{saving ? 'Saving…' : 'Save conversation'} <span>↗</span></button><span className="no-send-note">Saved for your records. Nothing is sent.</span></div>
+            </form>
+            <div className="conversation-layout"><div className="conversation-list"><div className="eyebrow">RECENT CONVERSATIONS</div>{conversations.length === 0 ? <p className="conversation-empty">Conversations you log will appear here.</p> : conversations.map((conversation) => { const lead = leads.find((item) => item.id === conversation.lead_id); return <button className={`conversation-thread ${selectedConversationId === conversation.id ? 'selected' : ''}`} key={conversation.id} onClick={() => setSelectedConversationId(conversation.id)}><b>{conversation.subject}</b><span>{lead?.name ?? 'Unlinked'} · {conversation.channel.toLowerCase()}</span><small>{conversation.messages[conversation.messages.length - 1]?.content ?? 'No messages'}</small></button> })}</div>
+              <div className="conversation-detail">{(() => { const selected = conversations.find((item) => item.id === selectedConversationId); if (!selected) return <div className="list-empty">Select a conversation or log a new one to get started.</div>; const lead = leads.find((item) => item.id === selected.lead_id); return <><header><div><h2>{selected.subject}</h2><span>{lead?.name ?? 'Unlinked conversation'} · {selected.channel.toLowerCase()}</span></div></header><div className="message-list">{selected.messages.map((message) => <article className={`message-bubble ${message.direction.toLowerCase()}`} key={message.id}><div><b>{message.direction === 'INBOUND' ? 'Customer message' : 'Team follow-up'}</b><time>{new Date(message.timestamp).toLocaleString()}</time></div><p>{message.content}</p></article>)}</div><form className="message-form" onSubmit={logMessage}><label>Log another message<textarea name="content" rows={3} required maxLength={12000} placeholder="Add the next customer reply or follow-up draft…" /></label><div className="form-actions"><select name="direction" defaultValue="OUTBOUND"><option value="OUTBOUND">Our follow-up draft</option><option value="INBOUND">Customer message</option></select><button className="primary">Save to timeline <span>↗</span></button><small>No email is sent.</small></div></form></> })()}</div>
+            </div>
           </section>}
           <footer className="dash-footer"><span>REVIVEAI &nbsp;·&nbsp; RECOVER WHAT’S ALREADY YOURS</span><span>BUILT FOR SMALL BUSINESS, WITH CARE <i>✳</i></span></footer>
         </div>

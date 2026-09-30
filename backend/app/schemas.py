@@ -156,3 +156,52 @@ class OpportunityResponse(BaseModel):
     reason: str
     recommended_action: str
 
+
+class MessageInput(BaseModel):
+    sender: str | None = Field(default=None, max_length=320)
+    recipient: str | None = Field(default=None, max_length=320)
+    direction: Literal["INBOUND", "OUTBOUND"]
+    content: str = Field(min_length=1, max_length=12000)
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def strip_message_content(cls, value: str) -> str:
+        return value.strip()
+
+
+class MessageResponse(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    sender: str | None
+    recipient: str | None
+    direction: Literal["INBOUND", "OUTBOUND"]
+    content: str
+    timestamp: datetime
+    metadata_json: dict[str, object] | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ConversationInput(BaseModel):
+    lead_id: UUID | None = None
+    channel: Literal["EMAIL", "PHONE", "MEETING", "OTHER"] = "EMAIL"
+    subject: str = Field(min_length=1, max_length=240)
+    first_message: MessageInput
+
+    @field_validator("subject", mode="before")
+    @classmethod
+    def strip_subject(cls, value: str) -> str:
+        return value.strip()
+
+
+class ConversationResponse(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    lead_id: UUID | None
+    channel: str
+    subject: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    messages: list[MessageResponse]
+    model_config = ConfigDict(from_attributes=True)
+
