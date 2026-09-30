@@ -22,7 +22,7 @@ Returns an access token, user, and initial workspace. Email addresses are normal
 
 ## Dashboard
 
-`GET /api/v1/dashboard` derives at-risk totals from sent quotes and inactive leads that have been waiting for at least seven days.
+`GET /api/v1/dashboard` derives at-risk totals from sent quotes and active leads that have been waiting for at least seven days. It includes a currency breakdown; lead estimates use USD, and quote values remain in their recorded currency.
 
 ## Leads
 

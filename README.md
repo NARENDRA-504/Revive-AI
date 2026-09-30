@@ -4,7 +4,7 @@ ReviveAI helps small service businesses find stalled leads and quotations, under
 
 ## Current phase: core business data
 
-The foundation includes a React client, FastAPI API, PostgreSQL persistence, password-based authentication, workspace membership, Docker development environment, and Alembic migrations. Core data includes workspace-scoped lead and quote management with create, list, update, and delete operations. The dashboard derives its stalled lead and quote totals from saved workspace records, and a deterministic opportunity feed explains why each item is waiting and what to review next.
+The foundation includes a React client, FastAPI API, PostgreSQL persistence, password-based authentication, workspace membership, Docker development environment, and Alembic migrations. Core data includes workspace-scoped lead and quote management with create, list, update, and delete operations. The dashboard derives its stalled lead and quote totals from saved workspace records, and a deterministic opportunity feed explains why each item is waiting and what to review next. At-risk amounts are grouped by currency; lead estimates currently use USD.
 
 ## Stack
 

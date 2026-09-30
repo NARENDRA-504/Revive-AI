@@ -75,6 +75,7 @@ class DashboardResponse(BaseModel):
     workspace_id: UUID
     workspace_name: str
     revenue_at_risk: float = 0
+    revenue_at_risk_by_currency: dict[str, float] = Field(default_factory=dict)
     stalled_quotes: int = 0
     stalled_leads: int = 0
     unanswered_customers: int = 0

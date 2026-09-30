@@ -9,6 +9,7 @@ type Session = {
 type Dashboard = {
   workspace_name: string
   revenue_at_risk: number
+  revenue_at_risk_by_currency: Record<string, number>
   stalled_quotes: number
   stalled_leads: number
   unanswered_customers: number
@@ -238,6 +239,7 @@ export default function App() {
   const metrics: Dashboard = dashboard ?? {
     workspace_name: workspaceName,
     revenue_at_risk: 0,
+    revenue_at_risk_by_currency: {},
     stalled_quotes: 0,
     stalled_leads: 0,
     unanswered_customers: 0,
@@ -245,6 +247,7 @@ export default function App() {
     recovered_this_month: 0,
   }
   const firstName = session.user.name.split(' ')[0]
+  const riskTotals = Object.entries(metrics.revenue_at_risk_by_currency ?? {}).filter(([, amount]) => amount > 0)
 
   return (
     <div className="app-shell">
@@ -293,7 +296,7 @@ export default function App() {
           {activePage === 'overview' && <section className="risk-card">
             <div className="risk-main">
               <div className="eyebrow">TOTAL REVENUE AT RISK <span className="info">i</span></div>
-              <div className="risk-amount">${metrics.revenue_at_risk.toLocaleString('en-US')}<span>.00</span></div>
+              <div className="risk-amount">{riskTotals.length ? riskTotals.map(([currency, amount]) => <span className="risk-amount-item" key={currency}>{new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount)}</span>) : <span className="risk-amount-item">$0</span>}</div>
               <div className="risk-caption"><span className="risk-spark">↗</span> {loadingDashboard ? 'Loading your workspace…' : 'Opportunities surfaced from your workspace'}</div>
             </div>
             <div className="risk-art"><div className="orb orb-a"/><div className="orb orb-b"/><div className="orb orb-c"/><div className="art-center">R<span>✳</span></div><div className="art-label">RECOVERY<br />ENGINE</div></div>
@@ -334,7 +337,7 @@ export default function App() {
           </> : activePage === 'leads' ? <section className="data-page">
             <form key={editingLead?.id ?? 'new-lead'} className="record-form" onSubmit={(event) => saveRecord(event, 'leads')}>
               <div className="eyebrow">YOUR PIPELINE</div><h2>{editingLead ? `Edit ${editingLead.name}` : 'New lead'}</h2>
-              <div className="form-grid"><label>Name *<input name="name" required maxLength={160} placeholder="Maya Chen" defaultValue={editingLead?.name ?? ''} /></label><label>Company<input name="company" maxLength={160} placeholder="Company name" defaultValue={editingLead?.company ?? ''} /></label><label>Email<input name="email" type="email" placeholder="maya@company.com" defaultValue={editingLead?.email ?? ''} /></label><label>Phone<input name="phone" maxLength={40} placeholder="Phone number" defaultValue={editingLead?.phone ?? ''} /></label><label>Source<input name="source" maxLength={80} placeholder="Referral, website…" defaultValue={editingLead?.source ?? ''} /></label><label>Estimated value<input name="estimated_value" type="number" min="0" step="0.01" defaultValue={editingLead?.estimated_value ?? 0} /></label><label>Status<select name="status" defaultValue={editingLead?.status ?? 'NEW'}>{leadStatuses.map((status) => <option key={status}>{status}</option>)}</select></label><label>Next follow-up<input name="next_followup_at" type="datetime-local" defaultValue={editingLead?.next_followup_at?.slice(0, 16) ?? ''} /></label></div>
+              <div className="form-grid"><label>Name *<input name="name" required maxLength={160} placeholder="Maya Chen" defaultValue={editingLead?.name ?? ''} /></label><label>Company<input name="company" maxLength={160} placeholder="Company name" defaultValue={editingLead?.company ?? ''} /></label><label>Email<input name="email" type="email" placeholder="maya@company.com" defaultValue={editingLead?.email ?? ''} /></label><label>Phone<input name="phone" maxLength={40} placeholder="Phone number" defaultValue={editingLead?.phone ?? ''} /></label><label>Source<input name="source" maxLength={80} placeholder="Referral, website…" defaultValue={editingLead?.source ?? ''} /></label><label>Estimated value (USD)<input name="estimated_value" type="number" min="0" step="0.01" defaultValue={editingLead?.estimated_value ?? 0} /></label><label>Status<select name="status" defaultValue={editingLead?.status ?? 'NEW'}>{leadStatuses.map((status) => <option key={status}>{status}</option>)}</select></label><label>Next follow-up<input name="next_followup_at" type="datetime-local" defaultValue={editingLead?.next_followup_at?.slice(0, 16) ?? ''} /></label></div>
               <label>Notes<textarea name="notes" maxLength={4000} rows={3} placeholder="Context and next steps" defaultValue={editingLead?.notes ?? ''} /></label><div className="form-actions"><button className="primary" disabled={saving}>{saving ? 'Saving…' : editingLead ? 'Save changes' : 'Add lead'} <span>↗</span></button>{editingLead && <button type="button" className="cancel-edit" onClick={() => setEditingLead(null)}>Cancel</button>}</div>
             </form>
             <div className="section-line"><div><div className="eyebrow">YOUR PIPELINE</div><h2>{leads.length} {leads.length === 1 ? 'lead' : 'leads'}</h2></div></div>
